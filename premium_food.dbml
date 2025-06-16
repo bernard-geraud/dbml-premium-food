@@ -68,8 +68,9 @@ Table user_activity_log [headercolor: #ff0000] {
   target_type varchar(100) [null, note: "Type of entity targeted by the action (e.g., 'store', 'product')"]
   target_id varchar(36) [null, note: "ID of the entity targeted by the action"]
   timestamp timestamp [default: `now()`, not null, note: "Timestamp of the action"]
-  latitude decimal(9,6) [null, note: "Latitude of the user at the time of the action"]
-  longitude decimal(9,6) [null, note: "Longitude of the user at the time of the action"]
+  // latitude decimal(9,6) [null, note: "Latitude of the user at the time of the action"]
+  // longitude decimal(9,6) [null, note: "Longitude of the user at the time of the action"]
+  location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
   ip_address varchar(45) [null, note: "IP address from which the action originated"]
   note: "Log of user actions with geolocation for audit and presence control."
 }
@@ -81,8 +82,10 @@ Table user_activity_log [headercolor: #ff0000] {
  
 Table zones [headercolor: #007bff] {
   id varchar(36) [pk, note: "UUID for the zone, primary key"]
-  name varchar(100) [not null, unique, note: "Unique name of the geographical zone"]
-  region varchar(100) [not null, note: "Broader region where the zone is located"]
+  name varchar(100) [not null, unique, note: "Unique name of the market zone"]
+  //region varchar(100) [not null, note: "Broader region where the zone is located"]
+  description varchar
+  sector_id varchar(36) [ref: > sectors.id, not null, note: "Foreign key to sectors"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   note: "Geographical coverage zones for points of sale."
@@ -98,8 +101,9 @@ Table stores [headercolor: #007bff] {
   store_type varchar(50) [not null, note: "Type of store (e.g., 'Supermarket', 'Grossiste')"]
   store_number varchar(50) [null, note: "Phone number of the store"]
   wa_store_number varchar(50) [null, note: "WA Phone number of the store"]
-  latitude decimal(9,6) [not null, note: "Latitude of the store's location"]
-  longitude decimal(9,6) [not null, note: "Longitude of the store's location"]
+  // latitude decimal(9,6) [not null, note: "Latitude of the store's location"]
+  // longitude decimal(9,6) [not null, note: "Longitude of the store's location"]
+  location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
   city varchar(100) [not null, note: "City where the store is located"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
@@ -156,13 +160,23 @@ Table product_variants [headercolor: #28a745] {
  
 Table inventory [headercolor: #28a745] {
   product_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
-  store_id varchar(36) [ref: > stores.id, note: "Foreign key to the store"]
+  // store_id varchar(36) [ref: > stores.id, note: "Foreign key to the store"]
   stock_quantity int [default: 0, not null, note: "Current stock quantity"]
+  agent_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
   last_updated timestamp [default: `now()`, not null, note: "Timestamp of the last inventory update"]
   note: "Stock available for each product variant per store."
   indexes {
     (product_variant_id, store_id) [pk]
   }
+}
+
+Table products_supply {
+  id varchar(36) [pk, note: "UUID for the product supply, primary key"]
+  pproduct_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
+  stock_quantity int [not null, note: "quatity supplied"]
+  agent_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
+  add_at datetime
+  wholesaler_id varchar(36) [ref: > wholesalers.id, note: "Foreign key to the wholesaler"]
 }
  
 // ---
@@ -172,7 +186,6 @@ Table inventory [headercolor: #28a745] {
  
 Table orders [headercolor: #ffc107] {
   id varchar(36) [pk, note: "UUID for the order, primary key"]
-  shopper_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the shopper (user)"]
   store_id varchar(36) [ref: > stores.id, not null, note: "Foreign key to the store for fulfillment"]
   order_date timestamp [default: `now()`, not null, note: "Timestamp when the order was placed"]
   total_amount decimal(10,2) [not null, note: "Total amount of the order"]
@@ -202,7 +215,6 @@ Table order_items [headercolor: #ffc107] {
 Table reviews [headercolor: #17a2b8] {
   id varchar(36) [pk, note: "UUID for the review, primary key"]
   product_id varchar(36) [ref: > products.id, not null, note: "Foreign key to the product being reviewed"]
-  shopper_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the shopper (user)"]
   rating int [not null, note: "Rating (e.g., 1 to 5 stars). Should be between 1 and 5."]
   comment text [null, note: "Textual comment or feedback"]
   review_date timestamp [default: `now()`, not null]
@@ -222,8 +234,9 @@ Table store_visits [headercolor: #6f42c1] {
   visit_date timestamp [default: `now()`, not null, note: "Timestamp of the visit"]
   status varchar(50) [default: 'Completed', not null, note: "Status of the visit"]
   comment text [null, note: "General comments about the visit"]
-  latitude decimal(9,6) [not null, note: "Latitude for visit verification"]
-  longitude decimal(9,6) [not null, note: "Longitude for visit verification"]
+  // latitude decimal(9,6) [not null, note: "Latitude for visit verification"]
+  // longitude decimal(9,6) [not null, note: "Longitude for visit verification"]
+  location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
   check_in_time timestamp [null]
   check_out_time timestamp [null]
   product_audits_data json [null, note: "JSON array of product audit objects collected during the visit. E.g., [{'variant_id': 'uuid', 'observed_price': 9.99, ...}]"]
@@ -232,4 +245,44 @@ Table store_visits [headercolor: #6f42c1] {
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   note: "Consolidated POS visits. Audits, surveys, and media are stored as JSON."
+}
+
+Table wholesalers {
+  id varchar(36) [pk, note: "UUID for the wholesaler, primary key"]
+  name varchar
+  location varchar [not null, note: "location where the agent made the sale"]
+  description varchar
+}
+
+Table sectors {
+  id varchar(36) [pk, note: "UUID for the sector, primary key"]
+  name varchar
+  description varchar
+}
+
+// Table zone {
+//   id varchar(36) [pk, note: "UUID for the zone, primary key"]
+//   name varchar
+//   description varchar
+//   sector_id varchar(36) [ref: > sectors.id, not null, note: "Foreign key to sectors"]
+// }
+
+Table withdraw [headercolor: #ffc107] {
+  id varchar(36) [pk, note: "UUID for the withdraw, primary key"]
+  seller_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the seller (user)"]
+  saled_at timestamp [default: `now()`, not null, note: "Timestamp when the agent sale a product"]
+  total_amount decimal(10,2) [not null, note: "Total amount of the withdraw"]
+  location varchar [not null, note: "location where the agent made the sale"]
+}
+
+Table withdraw_items [headercolor: #ffc107] {
+  id varchar(36) [pk, note: "UUID for the withdraw item, primary key"]
+  withdraw_id varchar(36) [ref: > withdraw.id, not null, note: "Foreign key to the withdraw"]
+  product_variant_id varchar(36) [ref: > product_variants.id, not null, note: "Foreign key to the product variant"]
+  product_name varchar(255) [not null, note: "Denormalized: product name at time of purchase"]
+  sku varchar(100) [not null, note: "Denormalized: variant SKU at time of purchase"]
+  quantity int [default: 1, not null, note: "Quantity. Should be > 0."]
+  price_at_purchase decimal(10,2) [not null, note: "Price of the variant at the time of purchase"]
+  amount decimal(10,2) [not null]
+  note: "Denormalized item details for faster reads. Includes product name and SKU."
 }
