@@ -4,7 +4,7 @@
 // This version simplifies the original architecture by:
 // 1. Merging product attributes into a JSON field in product_variants.
 // 2. Removing the granular permissions system in favor of a simpler role-based approach.
-// 3. Consolidating store visit details (audits, surveys, media) into JSON fields in the store_visits table.
+// 3. Consolidating pos visit details (audits, surveys, media) into JSON fields in the pos_visits table.
 // 4. Denormalizing order_items to include product details for faster reads.
 // ---
  
@@ -60,71 +60,163 @@ Table user_roles [headercolor: #ff0000] {
     (user_id, role_id) [pk]
   }
 }
+
+Table activities {
+  id varchar(36) [pk, note: "UUID for the activity, primary key"]
+  name varchar [note: "activity name"]
+  description text
+  created_at timestamp [default: `now()`, not null]
+}
+
+Table activity_permissions {
+  activity_id varchar [ref: > activities.id, not null]
+  permission_id varchar [ref: > permissions.id, not null]
+  created_at timestamp [default: `now()`, not null]
+}
+
+Table users_activities {
+  activity_id varchar [ref: > activities.id, not null]
+  user_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user who performed the activity"]
+  execution_date datetime
+}
  
 Table user_activity_log [headercolor: #ff0000] {
   id varchar(36) [pk, note: "UUID for the activity log entry, primary key"]
   user_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user who performed the action"]
-  action varchar(255) [not null, note: "Description of the action performed (e.g., 'login', 'create_store')"]
-  target_type varchar(100) [null, note: "Type of entity targeted by the action (e.g., 'store', 'product')"]
+  action varchar(255) [not null, note: "Description of the action performed (e.g., 'login', 'create_pos')"]
+  target_type varchar(100) [null, note: "Type of entity targeted by the action (e.g., 'pos', 'product')"]
   target_id varchar(36) [null, note: "ID of the entity targeted by the action"]
   timestamp timestamp [default: `now()`, not null, note: "Timestamp of the action"]
-  // latitude decimal(9,6) [null, note: "Latitude of the user at the time of the action"]
-  // longitude decimal(9,6) [null, note: "Longitude of the user at the time of the action"]
   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
   ip_address varchar(45) [null, note: "IP address from which the action originated"]
   note: "Log of user actions with geolocation for audit and presence control."
 }
- 
- 
+
 // ---
-// Module: Merchandising and Store Management
+// Module: Sector and Zone
 // ---
- 
+
+Table sectors {
+  id varchar(36) [pk, note: "UUID for the sector, primary key"]
+  name varchar
+  description text
+  sector_locations "varchar[]" [note: "List of geographical location that delimitated each sector"]
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `now()`, not null]
+  note: "Geographical coverage sector for zones"
+}
+
+Table merchs_sectors {
+  sector_id varchar [ref: > sectors.id, not null]
+  merch_id varchar [ref: > users.id, not null]
+}
+
+// Table sector_locations {
+//   sector_id varchar [ref: > sectors.id, not null, note: "Foreign key of sector"]
+//   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
+//   note: "List of geographical location that delimitated each sector"
+// }
+
 Table zones [headercolor: #007bff] {
   id varchar(36) [pk, note: "UUID for the zone, primary key"]
   name varchar(100) [not null, unique, note: "Unique name of the market zone"]
-  //region varchar(100) [not null, note: "Broader region where the zone is located"]
   description varchar
+  zone_locations "varchar[]" [note: "List of geographical location that delimitated each zone"]
   sector_id varchar(36) [ref: > sectors.id, not null, note: "Foreign key to sectors"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   note: "Geographical coverage zones for points of sale."
 }
- 
-Table stores [headercolor: #007bff] {
-  id varchar(36) [pk, note: "UUID for the store, primary key"]
-  merchandiser_id varchar(36) [ref: > users.id, null, note: "Foreign key to the primary merchandiser (user) assigned to this store"]
-  zone_id varchar(36) [ref: > zones.id, not null, note: "Foreign key to the geographical zone"]
-  store_manager_id varchar(36) [ref: > store_manager.id, null, note: "Foreign key to the store manager"]
-  store_name varchar(255) [not null, note: "Name of the point of sale"]
-  validation_status varchar(50) [default: 'Pending', not null, note: "Status (e.g., 'Pending', 'Approved')"]
-  store_type varchar(50) [not null, note: "Type of store (e.g., 'Supermarket', 'Grossiste')"]
-  store_number varchar(50) [null, note: "Phone number of the store"]
-  wa_store_number varchar(50) [null, note: "WA Phone number of the store"]
-  // latitude decimal(9,6) [not null, note: "Latitude of the store's location"]
-  // longitude decimal(9,6) [not null, note: "Longitude of the store's location"]
-  location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
-  city varchar(100) [not null, note: "City where the store is located"]
+
+Table merchs_zones {
+  zone_id varchar [ref: > zones.id, not null]
+  merch_id varchar [ref: > users.id, not null]
+}
+
+// Table zone_locations {
+//   zone_id varchar [ref: > zones.id, not null, note: "Foreign key of zone"]
+//   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
+//   note: "List of geographical location that delimitated each zone"
+// }
+
+// ---
+// Module: Point of Sale
+// ---
+
+Table pos_type {
+  id varchar(36) [pk, note: "UUID for the type of pos, primary key"]
+  name varchar [not null, note: "name of the pos type (e.g., 'Mami', 'Supermarket', 'Superette')"]
+  description text
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   created_by varchar(36) [ref: > users.id, null]
-  is_active boolean [default: true, not null, note: "Status of the store (for soft delete)"]
-  note: "Points of sale with validation, type, and geolocation."
 }
  
-Table store_manager [headercolor: #007bff] {
-  id varchar(36) [pk, note: "UUID for the store manager, primary key"]
-  name varchar(255) [not null, note: "Name of the store manager"]
-  manager_phone_number varchar(50) [null, unique, note: "Phone number of the store manager"]
-  watsapp_phone varchar(50) [null, unique, note: "WA Phone number of the store manager"]
-  note: "Store Manager information"
+Table pos [headercolor: #007bff] {
+  id varchar(36) [pk, note: "UUID for the pos, primary key"]
+  pos_name varchar(255) [not null, note: "Name of the point of sale"]
+  pos_description text
+  zone_id varchar(36) [ref: > zones.id, not null, note: "Foreign key to the geographical zone"]
+  pos_type_id varchar(50) [ref: > pos_type.id, not null, note: "Type of pos"]
+  validation_status varchar(50) [default: 'Pending', not null, note: "Status (e.g., 'Pending', 'Approved')"]
+  city varchar(100) [not null, note: "City where the pos is located"]
+  location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
+  wa_pos_phone_number "varchar[]" [null, note: "WA Phone number of the pos"]
+  pos_default_phone_number varchar(50) [null, note: "Phone number of the pos"]
+  pos_default_manager varchar [ref: > users.id]
+
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `now()`, not null]
+  created_by varchar(36) [ref: > users.id, null]
+  is_active boolean [default: true, not null, note: "Status of the pos (for soft delete)"]
+  note: "Points of sale with validation, type, and geolocation."
 }
+
+Table pos_permanent_merchs {
+  pos_id varchar [ref: > pos.id, note: "reference of pos"],
+  merch_id varchar [ref: > users.id, note: "user who works permanently in that pos"]
+}
+
+Table pos_managers [headercolor: #007bff] {
+  pos_id varchar [ref: > pos.id, note: "reference of pos"],
+  manager_id varchar [ref: > users.id, note: "user who manage pos activities"]
+}
+
+// ---
+// Module: Wholesalers
+// ---
+
+Table wholesalers {
+  id varchar(36) [pk, note: "UUID for the wholesaler, primary key"]
+  name varchar
+  location varchar [not null, note: "location where the agent made the sale, example: 3°53'07.1\"N 11°30'09.9\"E"]
+  description text
+  wa_wholesaler_phone_number "varchar[]" [null, note: "WA Phone numbers of the wholesaler"]
+  wholesaler_default_phone_number varchar(50) [null, note: "Phone number of the pos"]
+  wholesaler_default_manager varchar [ref: > users.id]
+  wholesaler_default_phone_number varchar(50) [null, note: "Phone number of the wholesaler"]
+}
+
+Table wholesaler_managers [headercolor: #007bff] {
+  wholesaler_id varchar [ref: > wholesalers.id, note: "reference of wholesaler"],
+  manager_id varchar [ref: > users.id, note: "user who manage wholesaler activities"]
+}
+
+Table wholesaler_merchs {
+  wholesaler_id varchar [ref: > wholesalers.id, note: "reference of wholesaler"]
+  agent_id varchar [ref: > users.id, note: "user who is supplied by the wholesaler"]
+}
+
+// ---
+// Module: Merchandising and Store Management
+// ---
+ 
  
 // ---
 // Module: Product Catalog (Simplified)
 // ---
  
-Table categories [headercolor: #28a745] {
+Table product_categories [headercolor: #28a745] {
   id varchar(36) [pk, note: "UUID for the category, primary key"]
   name varchar(100) [not null, unique, note: "Unique name of the product category"]
   description text [null, note: "Description of the category"]
@@ -138,7 +230,7 @@ Table products [headercolor: #28a745] {
   id varchar(36) [pk, note: "UUID for the product, primary key"]
   name varchar(255) [not null, note: "Name of the product"]
   description text [null, note: "Detailed description of the product"]
-  category_id varchar(36) [ref: > categories.id, not null, note: "Foreign key to the product's category"]
+  category_id varchar(36) [ref: > product_categories.id, not null, note: "Foreign key to the product's category"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   is_active boolean [default: true, not null, note: "Status of the product (for soft delete)"]
@@ -155,30 +247,51 @@ Table product_variants [headercolor: #28a745] {
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   is_active boolean [default: true, not null, note: "Status of the variant (for soft delete)"]
-  note: "Product variants with price, SKU, image, and flexible attributes stored as JSON."
+  note: "Product variants with price, SKU, image, and flexible attributes saved as JSON."
 }
  
-Table inventory [headercolor: #28a745] {
+Table merch_inventory [headercolor: #28a745] {
   product_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
-  // store_id varchar(36) [ref: > stores.id, note: "Foreign key to the store"]
   stock_quantity int [default: 0, not null, note: "Current stock quantity"]
-  agent_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
+  merch_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
   last_updated timestamp [default: `now()`, not null, note: "Timestamp of the last inventory update"]
-  note: "Stock available for each product variant per store."
-  indexes {
-    (product_variant_id, store_id) [pk]
-  }
+  note: "Stock available for each product variant per merch."
 }
 
-Table products_supply {
-  id varchar(36) [pk, note: "UUID for the product supply, primary key"]
-  pproduct_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
-  stock_quantity int [not null, note: "quatity supplied"]
-  agent_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
-  add_at datetime
-  wholesaler_id varchar(36) [ref: > wholesalers.id, note: "Foreign key to the wholesaler"]
+Table pos_inventory [headercolor: #28a745] {
+  product_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
+  stock_quantity int [default: 0, not null, note: "Current stock quantity"]
+  pos_id varchar(36) [ref: > users.id, note: "Foreign key to the pos"]
+  last_updated timestamp [default: `now()`, not null, note: "Timestamp of the last inventory update"]
+  note: "Stock available for each product variant per pos."
 }
- 
+
+Table products_retrieval {
+  id varchar(36) [pk, note: "UUID for the product supply, primary key"]
+  merch_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
+  wholesaler_id varchar(36) [ref: > wholesalers.id, note: "Foreign key to the wholesaler"]
+  retrieve_at datetime [default: `now()`, not null, note: "datetime of the products retrieval"]
+}
+
+Table products_retrieval_item {
+  products_retrieval_id varchar(36) [ref: > products_retrieval.id, not null, note: "foreign key"]
+  product_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
+  stock_quantity int [not null, note: "quatity retrieved"]
+}
+
+Table products_send_back {
+  id varchar(36) [pk, note: "UUID for the product supply, primary key"]
+  merch_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
+  wholesaler_id varchar(36) [ref: > wholesalers.id, note: "Foreign key to the wholesaler"]
+  send_back_at datetime [default: `now()`, not null, note: "datetime of the products send back"]
+}
+
+Table products_send_back_item {
+  products_send_back_id varchar(36) [ref: > products_send_back.id, not null, note: "foreign key"]
+  product_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
+  stock_quantity int [not null, note: "quatity send back"]
+}
+
 // ---
 // Module: Shopping and Order Management (Simplified)
 // ---
@@ -186,7 +299,7 @@ Table products_supply {
  
 Table orders [headercolor: #ffc107] {
   id varchar(36) [pk, note: "UUID for the order, primary key"]
-  store_id varchar(36) [ref: > stores.id, not null, note: "Foreign key to the store for fulfillment"]
+  pos_id varchar(36) [ref: > pos.id, not null, note: "Foreign key to the pos for fulfillment"]
   order_date timestamp [default: `now()`, not null, note: "Timestamp when the order was placed"]
   total_amount decimal(10,2) [not null, note: "Total amount of the order"]
   status varchar(50) [default: 'Pending', not null, note: "Order status (e.g., 'Pending', 'Delivered')"]
@@ -205,6 +318,18 @@ Table order_items [headercolor: #ffc107] {
   quantity int [default: 1, not null, note: "Quantity. Should be > 0."]
   price_at_purchase decimal(10,2) [not null, note: "Price of the variant at the time of purchase"]
   note: "Denormalized item details for faster reads. Includes product name and SKU."
+}
+
+// ---
+// Module: Delivery
+// ---
+
+Table pos_delivery {
+  pos_id varchar [ref: > pos.id, not null],
+  order_id varchar [ref: > orders.id, not null],
+  merche_id varchar [ref: > users.id]
+  delivery_status boolean
+  delivered_at timestamp [default: `now()`, not null]
 }
  
  
@@ -225,40 +350,56 @@ Table reviews [headercolor: #17a2b8] {
 // ---
 // Module: Store Visit and Audit (Simplified)
 // ---
- 
-Table store_visits [headercolor: #6f42c1] {
-  id varchar(36) [pk, note: "UUID for the store visit, primary key"]
-  store_id varchar(36) [ref: > stores.id, not null, note: "Foreign key to the store visited"]
-  visitor_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user performing the visit"]
-  visit_type varchar(50) [not null, note: "Type of visit (e.g., 'Sales Visit', 'Audit')"]
-  visit_date timestamp [default: `now()`, not null, note: "Timestamp of the visit"]
-  status varchar(50) [default: 'Completed', not null, note: "Status of the visit"]
-  comment text [null, note: "General comments about the visit"]
-  // latitude decimal(9,6) [not null, note: "Latitude for visit verification"]
-  // longitude decimal(9,6) [not null, note: "Longitude for visit verification"]
+
+Table pos_visits [headercolor: #6f42c1] {
+  id varchar(36) [pk, note: "UUID for the pos visit, primary key"]
+  pos_id varchar(36) [ref: > pos.id, not null, note: "Foreign key to the pos visited"]
+  merch_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user performing the visit"]
   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
-  check_in_time timestamp [null]
-  check_out_time timestamp [null]
-  product_audits_data json [null, note: "JSON array of product audit objects collected during the visit. E.g., [{'variant_id': 'uuid', 'observed_price': 9.99, ...}]"]
-  survey_responses_data json [null, note: "JSON array of survey responses. E.g., [{'question': '...', 'answer': '...'}]"]
+  comment text [null, note: "General comments about the visit"]
   media_data json [null, note: "JSON array of media objects. E.g., [{'image_url': '...', 'comment': '...'}]"]
+  visit_date timestamp [default: `now()`, not null, note: "Timestamp of the visit"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
-  note: "Consolidated POS visits. Audits, surveys, and media are stored as JSON."
+  note: "Consolidated POS visits. Audits, surveys, and media are posd as JSON."
 }
 
-Table wholesalers {
-  id varchar(36) [pk, note: "UUID for the wholesaler, primary key"]
-  name varchar
-  location varchar [not null, note: "location where the agent made the sale"]
-  description varchar
+Table pos_visit_item {
+  pos_visit_id varchar [ref: > pos_visits.id, not null]
+  product_variant_id varchar [ref: > product_variants.id, not null]
+  quantity int [default: 0, not null, note: "Current stock quantity"]
 }
+ 
+// Table pos_visits [headercolor: #6f42c1] {
+//   id varchar(36) [pk, note: "UUID for the pos visit, primary key"]
+//   pos_id varchar(36) [ref: > pos.id, not null, note: "Foreign key to the pos visited"]
+//   visitor_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user performing the visit"]
+//   visit_type varchar(50) [not null, note: "Type of visit (e.g., 'Sales Visit', 'Audit')"]
+//   visit_date timestamp [default: `now()`, not null, note: "Timestamp of the visit"]
+//   status varchar(50) [default: 'Completed', not null, note: "Status of the visit"]
+//   comment text [null, note: "General comments about the visit"]
+//   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
+//   check_in_time timestamp [null]
+//   check_out_time timestamp [null]
+//   product_audits_data json [null, note: "JSON array of product audit objects collected during the visit. E.g., [{'variant_id': 'uuid', 'observed_price': 9.99, ...}]"]
+//   survey_responses_data json [null, note: "JSON array of survey responses. E.g., [{'question': '...', 'answer': '...'}]"]
+//   media_data json [null, note: "JSON array of media objects. E.g., [{'image_url': '...', 'comment': '...'}]"]
+//   created_at timestamp [default: `now()`, not null]
+//   updated_at timestamp [default: `now()`, not null]
+//   note: "Consolidated POS visits. Audits, surveys, and media are posd as JSON."
+// }
 
-Table sectors {
-  id varchar(36) [pk, note: "UUID for the sector, primary key"]
-  name varchar
-  description varchar
-}
+
+
+// Table users_zones [headercolor: #ff0000] {
+//   user_id varchar(36) [ref: > users.id, note: "Foreign key to users table"]
+//   zone_id varchar(36) [ref: > zones.id, note: "Foreign key to zones table"]
+//   created_at timestamp [default: `now()`, not null]
+//   note: "Assignment of roles to users. A user can have multiple roles."
+//   indexes {
+//     (user_id, role_id) [pk]
+//   }
+// }
 
 // Table zone {
 //   id varchar(36) [pk, note: "UUID for the zone, primary key"]
@@ -267,22 +408,31 @@ Table sectors {
 //   sector_id varchar(36) [ref: > sectors.id, not null, note: "Foreign key to sectors"]
 // }
 
-Table withdraw [headercolor: #ffc107] {
-  id varchar(36) [pk, note: "UUID for the withdraw, primary key"]
-  seller_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the seller (user)"]
-  saled_at timestamp [default: `now()`, not null, note: "Timestamp when the agent sale a product"]
+Table product_sales [headercolor: #ffc107] {
+  id varchar(36) [pk, note: "UUID for the sale product, primary key"]
+  merch_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the seller (user)"]
   total_amount decimal(10,2) [not null, note: "Total amount of the withdraw"]
   location varchar [not null, note: "location where the agent made the sale"]
+  saled_at timestamp [default: `now()`, not null, note: "Timestamp when the merch sale a products"]
 }
 
-Table withdraw_items [headercolor: #ffc107] {
-  id varchar(36) [pk, note: "UUID for the withdraw item, primary key"]
-  withdraw_id varchar(36) [ref: > withdraw.id, not null, note: "Foreign key to the withdraw"]
+Table product_sales_items [headercolor: #ffc107] {
+  product_sales_id varchar(36) [ref: > product_sales.id, not null, note: "Foreign key to the product saled"]
   product_variant_id varchar(36) [ref: > product_variants.id, not null, note: "Foreign key to the product variant"]
   product_name varchar(255) [not null, note: "Denormalized: product name at time of purchase"]
   sku varchar(100) [not null, note: "Denormalized: variant SKU at time of purchase"]
   quantity int [default: 1, not null, note: "Quantity. Should be > 0."]
-  price_at_purchase decimal(10,2) [not null, note: "Price of the variant at the time of purchase"]
+  unit_price decimal(10,2) [not null, note: "Price of the variant at the time of purchase"]
   amount decimal(10,2) [not null]
   note: "Denormalized item details for faster reads. Includes product name and SKU."
+}
+
+Table attendance_monitoring {
+  id varchar(36) [pk, note: "UUID for the attendance, primary key"]
+  user_id varchar [ref: > users.id, not null]
+  start_time timestamp [default: `now()`, not null, note: "Timestamp when the user start the work"]
+  start_location varchar [not null, note: "location where the user start the work"]
+  end_time timestamp [not null, note: "Timestamp when the user end the work"]
+  end_location varchar [null, note: "location where the user end the work"]
+  date date [not null, note: "day of work"]
 }
