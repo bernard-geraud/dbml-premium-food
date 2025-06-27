@@ -7,13 +7,14 @@
 // 3. Consolidating pos visit details (audits, surveys, media) into JSON fields in the pos_visits table.
 // 4. Denormalizing order_items to include product details for faster reads.
 // ---
- 
+
  
 Table users [headercolor: #ff0000] {
   id varchar(36) [pk, note: "UUID for the user, primary key"]
   email varchar(255) [not null, unique, note: "User's unique email address, used for login"]
   password_hash varchar(255) [not null, note: "Hashed password for security"]
-  full_name varchar(255) [not null, note: "Full name of the user"]
+  first_name varchar(255) [not null, note: "First name of the user"]
+  last_name varchar(255) [not null, note: "Last name of the user"]
   matricule varchar(255) [not null, unique, note: "Full name of the user"]
   phone_number varchar(50) [null, note: "User's phone number"]
   profile_picture_url varchar(255) [null, note: "URL to the user's profile picture"]
@@ -60,25 +61,6 @@ Table user_roles [headercolor: #ff0000] {
     (user_id, role_id) [pk]
   }
 }
-
-Table activities {
-  id varchar(36) [pk, note: "UUID for the activity, primary key"]
-  name varchar [note: "activity name"]
-  description text
-  created_at timestamp [default: `now()`, not null]
-}
-
-Table activity_permissions {
-  activity_id varchar [ref: > activities.id, not null]
-  permission_id varchar [ref: > permissions.id, not null]
-  created_at timestamp [default: `now()`, not null]
-}
-
-Table users_activities {
-  activity_id varchar [ref: > activities.id, not null]
-  user_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user who performed the activity"]
-  execution_date datetime
-}
  
 Table user_activity_log [headercolor: #ff0000] {
   id varchar(36) [pk, note: "UUID for the activity log entry, primary key"]
@@ -106,38 +88,22 @@ Table sectors {
   note: "Geographical coverage sector for zones"
 }
 
-Table merchs_sectors {
-  sector_id varchar [ref: > sectors.id, not null]
-  merch_id varchar [ref: > users.id, not null]
-}
-
-// Table sector_locations {
-//   sector_id varchar [ref: > sectors.id, not null, note: "Foreign key of sector"]
-//   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
-//   note: "List of geographical location that delimitated each sector"
-// }
-
 Table zones [headercolor: #007bff] {
   id varchar(36) [pk, note: "UUID for the zone, primary key"]
   name varchar(100) [not null, unique, note: "Unique name of the market zone"]
   description varchar
   zone_locations "varchar[]" [note: "List of geographical location that delimitated each zone"]
   sector_id varchar(36) [ref: > sectors.id, not null, note: "Foreign key to sectors"]
+  city_id varchar(36) [ref: > cities.id]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   note: "Geographical coverage zones for points of sale."
 }
 
-Table merchs_zones {
+Table field_agent_zones {
   zone_id varchar [ref: > zones.id, not null]
-  merch_id varchar [ref: > users.id, not null]
+  field_agent_id varchar [ref: > users.id, not null]
 }
-
-// Table zone_locations {
-//   zone_id varchar [ref: > zones.id, not null, note: "Foreign key of zone"]
-//   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
-//   note: "List of geographical location that delimitated each zone"
-// }
 
 // ---
 // Module: Point of Sale
@@ -159,7 +125,7 @@ Table pos [headercolor: #007bff] {
   zone_id varchar(36) [ref: > zones.id, not null, note: "Foreign key to the geographical zone"]
   pos_type_id varchar(50) [ref: > pos_type.id, not null, note: "Type of pos"]
   validation_status varchar(50) [default: 'Pending', not null, note: "Status (e.g., 'Pending', 'Approved')"]
-  city varchar(100) [not null, note: "City where the pos is located"]
+  city_id varchar(36) [ref: > cities.id]
   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
   wa_pos_phone_number "varchar[]" [null, note: "WA Phone number of the pos"]
   pos_default_phone_number varchar(50) [null, note: "Phone number of the pos"]
@@ -172,14 +138,14 @@ Table pos [headercolor: #007bff] {
   note: "Points of sale with validation, type, and geolocation."
 }
 
-Table pos_permanent_merchs {
-  pos_id varchar [ref: > pos.id, note: "reference of pos"],
-  merch_id varchar [ref: > users.id, note: "user who works permanently in that pos"]
+Table pos_permanent_field_agent {
+  pos_id varchar [ref: > pos.id, not null, note: "reference of pos"]
+  field_agent_id varchar [ref: > users.id, not null, note: "user who works permanently in that pos"]
 }
 
 Table pos_managers [headercolor: #007bff] {
-  pos_id varchar [ref: > pos.id, note: "reference of pos"],
-  manager_id varchar [ref: > users.id, note: "user who manage pos activities"]
+  pos_id varchar [ref: > pos.id, not null, note: "reference of pos"]
+  manager_id varchar [ref: > users.id, not null, note: "user who manage pos activities"]
 }
 
 // ---
@@ -191,20 +157,19 @@ Table wholesalers {
   name varchar
   location varchar [not null, note: "location where the agent made the sale, example: 3°53'07.1\"N 11°30'09.9\"E"]
   description text
-  wa_wholesaler_phone_number "varchar[]" [null, note: "WA Phone numbers of the wholesaler"]
-  wholesaler_default_phone_number varchar(50) [null, note: "Phone number of the pos"]
+  wa_wholesaler_phone_number "varchar[]" [note: "WA Phone numbers of the wholesaler"]
   wholesaler_default_manager varchar [ref: > users.id]
-  wholesaler_default_phone_number varchar(50) [null, note: "Phone number of the wholesaler"]
+  wholesaler_default_phone_number varchar(50) [note: "Phone number of the wholesaler"]
 }
 
 Table wholesaler_managers [headercolor: #007bff] {
-  wholesaler_id varchar [ref: > wholesalers.id, note: "reference of wholesaler"],
+  wholesaler_id varchar [ref: > wholesalers.id, note: "reference of wholesaler"]
   manager_id varchar [ref: > users.id, note: "user who manage wholesaler activities"]
 }
 
-Table wholesaler_merchs {
+Table wholesaler_field_agents {
   wholesaler_id varchar [ref: > wholesalers.id, note: "reference of wholesaler"]
-  agent_id varchar [ref: > users.id, note: "user who is supplied by the wholesaler"]
+  field_agent_id varchar [ref: > users.id, note: "user who is supplied by the wholesaler"]
 }
 
 // ---
@@ -220,7 +185,7 @@ Table product_categories [headercolor: #28a745] {
   id varchar(36) [pk, note: "UUID for the category, primary key"]
   name varchar(100) [not null, unique, note: "Unique name of the product category"]
   description text [null, note: "Description of the category"]
-  parent_category_id varchar(36) [ref: > categories.id, null, note: "Self-referencing FK for hierarchical categories"]
+  parent_category_id varchar(36) [ref: > product_categories.id, null, note: "Self-referencing FK for hierarchical categories"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   note: "Hierarchical product categories."
@@ -228,7 +193,7 @@ Table product_categories [headercolor: #28a745] {
  
 Table products [headercolor: #28a745] {
   id varchar(36) [pk, note: "UUID for the product, primary key"]
-  name varchar(255) [not null, note: "Name of the product"]
+  name varchar(255) [not null, note: "Name of the product, e.g Cowbel, Miksi, ..."]
   description text [null, note: "Detailed description of the product"]
   category_id varchar(36) [ref: > product_categories.id, not null, note: "Foreign key to the product's category"]
   created_at timestamp [default: `now()`, not null]
@@ -236,26 +201,61 @@ Table products [headercolor: #28a745] {
   is_active boolean [default: true, not null, note: "Status of the product (for soft delete)"]
   note: "Base products. Variants with specific attributes are in the product_variants table."
 }
- 
+
 Table product_variants [headercolor: #28a745] {
   id varchar(36) [pk, note: "UUID for the product variant, primary key"]
   product_id varchar(36) [ref: > products.id, not null, note: "Foreign key to the base product"]
-  sku varchar(100) [not null, unique, note: "Stock Keeping Unit, unique identifier for the variant"]
-  price decimal(10,2) [not null, note: "Price of this specific variant"]
+  // sku varchar(100) [not null, unique, note: "Stock Keeping Unit, unique identifier for the variant"]
+  // price decimal(10,2) [not null, note: "Price of this specific variant"]
+  // attributes json [null, note: "JSON object for attributes, e.g., {'Size': '500g', 'Flavor': 'Vanilla'}"]
+  brand varchar [note: "product brand, e.g Cowbel, Miksi, ..."]
+  description text [null, note: "Detailed description of the product"]
+  category_id varchar(36) [ref: > product_categories.id, not null, note: "Foreign key to the product's category"]
+  sub_category_id varchar(36) [ref: > product_categories.id, not null, note: "Foreign key to the product's category"]
+  packaging_group varchar [note: "e.g bag, pouch, sachet, .."]
+  packaging_count int [note: "number of units in the packaging group"]
+  grammage_per_piece decimal(10,2) [note: "13.75, 170, ..."]
+  product_kg decimal(10,2) [note: "11.52, 0.9, ..."]
   image_url varchar(255) [null, note: "URL to the primary image for this variant"]
-  attributes json [null, note: "JSON object for attributes, e.g., {'Size': '500g', 'Flavor': 'Vanilla'}"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   is_active boolean [default: true, not null, note: "Status of the variant (for soft delete)"]
   note: "Product variants with price, SKU, image, and flexible attributes saved as JSON."
 }
- 
-Table merch_inventory [headercolor: #28a745] {
+
+Table cities {
+  id varchar(36) [pk, note: "UUID for the city, primary key"]
+  city_name varchar(50) [not null, unique]
+  created_at timestamp [default: `now()`, not null]
+}
+
+Table price_groups {
+  price_group_code varchar(36) [pk, note: "PGKIN, PGBAN, PGBUM, ..."]
+  price_group_name varchar(50) [note: "Kinshasa Price Groupm, Beni Price Group, ..."]
+  city_id varchar(36) [ref: > cities.id]
+  created_at timestamp [default: `now()`, not null]
+}
+
+Table prices {
+  id varchar(36) [pk, note: "UUID for the price, primary key"]
+  price_group_code varchar(36) [ref: > price_groups.price_group_code]
+  product_variant_id varchar(36) [ref: > product_variants.id]
+  price_usd decimal(10,2)
+  price_local_currency decimal(10,2)
+  exchange_rate decimal(10,2)
+  price_per_unit_usd decimal(10,2)
+  price_per_unit_local_currency decimal(10,2)
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `now()`, not null]
+}
+
+// FIELD AGENT
+Table field_agent_inventory [headercolor: #28a745] {
   product_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
   stock_quantity int [default: 0, not null, note: "Current stock quantity"]
-  merch_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
+  field_agent_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
   last_updated timestamp [default: `now()`, not null, note: "Timestamp of the last inventory update"]
-  note: "Stock available for each product variant per merch."
+  note: "Stock available for each product variant per field agent."
 }
 
 Table pos_inventory [headercolor: #28a745] {
@@ -268,7 +268,7 @@ Table pos_inventory [headercolor: #28a745] {
 
 Table products_retrieval {
   id varchar(36) [pk, note: "UUID for the product supply, primary key"]
-  merch_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
+  field_agent_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
   wholesaler_id varchar(36) [ref: > wholesalers.id, note: "Foreign key to the wholesaler"]
   retrieve_at datetime [default: `now()`, not null, note: "datetime of the products retrieval"]
 }
@@ -281,7 +281,7 @@ Table products_retrieval_item {
 
 Table products_send_back {
   id varchar(36) [pk, note: "UUID for the product supply, primary key"]
-  merch_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
+  field_agent_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
   wholesaler_id varchar(36) [ref: > wholesalers.id, note: "Foreign key to the wholesaler"]
   send_back_at datetime [default: `now()`, not null, note: "datetime of the products send back"]
 }
@@ -325,49 +325,37 @@ Table order_items [headercolor: #ffc107] {
 // ---
 
 Table pos_delivery {
-  pos_id varchar [ref: > pos.id, not null],
-  order_id varchar [ref: > orders.id, not null],
-  merche_id varchar [ref: > users.id]
+  pos_id varchar [ref: > pos.id, not null]
+  order_id varchar [ref: > orders.id, not null]
+  field_agent_id varchar [ref: > users.id]
   delivery_status boolean
   delivered_at timestamp [default: `now()`, not null]
-}
- 
- 
-// ---
-// Module: Reviews and Feedback
-// ---
- 
-Table reviews [headercolor: #17a2b8] {
-  id varchar(36) [pk, note: "UUID for the review, primary key"]
-  product_id varchar(36) [ref: > products.id, not null, note: "Foreign key to the product being reviewed"]
-  rating int [not null, note: "Rating (e.g., 1 to 5 stars). Should be between 1 and 5."]
-  comment text [null, note: "Textual comment or feedback"]
-  review_date timestamp [default: `now()`, not null]
-  is_approved boolean [default: false, not null, note: "Moderation status"]
-  note: "Customer reviews on products."
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
 }
  
 // ---
 // Module: Store Visit and Audit (Simplified)
 // ---
 
-Table pos_visits [headercolor: #6f42c1] {
+Table pos_inspect [headercolor: #6f42c1] {
   id varchar(36) [pk, note: "UUID for the pos visit, primary key"]
   pos_id varchar(36) [ref: > pos.id, not null, note: "Foreign key to the pos visited"]
-  merch_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user performing the visit"]
+  field_agent_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user performing the visit"]
   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
   comment text [null, note: "General comments about the visit"]
   media_data json [null, note: "JSON array of media objects. E.g., [{'image_url': '...', 'comment': '...'}]"]
   visit_date timestamp [default: `now()`, not null, note: "Timestamp of the visit"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
-  note: "Consolidated POS visits. Audits, surveys, and media are posd as JSON."
+  note: "Consolidated POS inspection. Audits, surveys, and media are posd as JSON."
 }
 
-Table pos_visit_item {
-  pos_visit_id varchar [ref: > pos_visits.id, not null]
+Table pos_inspect_item {
+  pos_visit_id varchar [ref: > pos_inspect.id, not null]
   product_variant_id varchar [ref: > product_variants.id, not null]
   quantity int [default: 0, not null, note: "Current stock quantity"]
+  unit_price decimal(10,2) [not null, note: "Price of the variant at the time of purchase"]
 }
  
 // Table pos_visits [headercolor: #6f42c1] {
@@ -389,31 +377,15 @@ Table pos_visit_item {
 //   note: "Consolidated POS visits. Audits, surveys, and media are posd as JSON."
 // }
 
-
-
-// Table users_zones [headercolor: #ff0000] {
-//   user_id varchar(36) [ref: > users.id, note: "Foreign key to users table"]
-//   zone_id varchar(36) [ref: > zones.id, note: "Foreign key to zones table"]
-//   created_at timestamp [default: `now()`, not null]
-//   note: "Assignment of roles to users. A user can have multiple roles."
-//   indexes {
-//     (user_id, role_id) [pk]
-//   }
-// }
-
-// Table zone {
-//   id varchar(36) [pk, note: "UUID for the zone, primary key"]
-//   name varchar
-//   description varchar
-//   sector_id varchar(36) [ref: > sectors.id, not null, note: "Foreign key to sectors"]
-// }
-
 Table product_sales [headercolor: #ffc107] {
   id varchar(36) [pk, note: "UUID for the sale product, primary key"]
-  merch_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the seller (user)"]
+  field_agent_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the seller (user)"]
+  pos_id varchar [ref: > pos.id, default: null, note: "referenece of pos where the field agent saled"]
   total_amount decimal(10,2) [not null, note: "Total amount of the withdraw"]
   location varchar [not null, note: "location where the agent made the sale"]
-  saled_at timestamp [default: `now()`, not null, note: "Timestamp when the merch sale a products"]
+  saled_at timestamp [default: `now()`, not null, note: "Timestamp when the field agent sale a products"]
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
 }
 
 Table product_sales_items [headercolor: #ffc107] {
@@ -427,6 +399,8 @@ Table product_sales_items [headercolor: #ffc107] {
   note: "Denormalized item details for faster reads. Includes product name and SKU."
 }
 
+// Attendance Monitoring
+
 Table attendance_monitoring {
   id varchar(36) [pk, note: "UUID for the attendance, primary key"]
   user_id varchar [ref: > users.id, not null]
@@ -436,3 +410,6 @@ Table attendance_monitoring {
   end_location varchar [null, note: "location where the user end the work"]
   date date [not null, note: "day of work"]
 }
+
+// Survey
+
