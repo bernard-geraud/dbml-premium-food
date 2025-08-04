@@ -8,7 +8,62 @@
 // 4. Denormalizing order_items to include product details for faster reads.
 // ---
 
- 
+// ADDRESS
+Table country {
+  id varchar(36) [pk, note: "UUID for country, primary key"]
+  country_name varchar(20) [not null, note: "name of the country"]
+  country_code varchar(5) [note: "e.g: +237, +149"]
+  flag varchar [note: "flag of the country, e.g: 🇨🇲, 🇧🇷, 🇬🇧, ..."]
+  phone_regex varchar [note: "^(\+0?1\s)?\(?\d{3}\)?$, ..."]
+  is_active boolean [default: true, note: "to enable or disable an instance"]
+  created_at timestamp [default: `now()`]
+  update_at timestamp [default: null]
+}
+
+Table regions {
+  id varchar(36) [pk, note: "UUID for the region, primary key"]
+  name varchar [not null, note: "e.g North, West, ..."]
+  country_id varchar(36) [ref: > country.id, not null]
+  offline_mode boolean [default: false, note: "to allow field agent to work offline in this region. offline oder is Region->city->District->Municipality->sector->zone"]
+  is_active boolean [default: true, note: "to enable or disable an instance"]
+  created_at timestamp [default: `now()`]
+  update_at timestamp [default: null]
+  indexes {
+    (id, country_id) [unique]
+  }
+}
+
+Table cities {
+  id varchar(36) [pk, note: "UUID for the city, primary key"]
+  city_name varchar(50) [not null, unique, note: "e.g Yaounde, Douala, ..."]
+  region_id varchar(36) [ref: > regions.id, not null, note: "e.g North, West, ..."]
+  offline_mode boolean [default: false, note: "to allow field agent to work offline in this city. offline oder is Region->city->District->Municipality->sector->zone"]
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+  is_active boolean [default: true, not null, note: "Status of the user account (for soft delete)"]
+}
+
+Table districts {
+  id varchar(36) [pk, note: "UUID for the district, primary key"]
+  name varchar [not null, note: "e.g  ..."]
+  city_id varchar(36) [ref: > cities.id, not null]
+  offline_mode boolean [default: false, note: "to allow field agent to work offline in this district. offline oder is  Region->city->District->Municipality->sector->zone"]
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+  is_active boolean [default: true, not null, note: "Status of the user account (for soft delete)"]
+}
+
+Table municipalities {
+  id varchar(36) [pk, note: "UUID for the municipality, primary key"]
+  name varchar [not null, note: "e.g Yaounde I, Yaounde II, Yaounde IV, ..."]
+  district_id varchar(36) [ref: > districts.id, not null, note: "e.g North, West, ..."]
+  offline_mode boolean [default: false, note: "to allow field agent to work offline in this municipality. offline oder is  Region->city->District->Municipality->sector->zone"]
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+  is_active boolean [default: true, not null, note: "Status of the user account (for soft delete)"]
+}
+
+// Authentication
 Table users [headercolor: #ff0000] {
   id varchar(36) [pk, note: "UUID for the user, primary key"]
   email varchar(255) [not null, unique, note: "User's unique email address, used for login"]
@@ -18,12 +73,15 @@ Table users [headercolor: #ff0000] {
   matricule varchar(255) [not null, unique, note: "Full name of the user"]
   phone_number varchar(50) [null, note: "User's phone number"]
   profile_picture_url varchar(255) [null, note: "URL to the user's profile picture"]
+  direct_supervisor_id varchar(36) [ref: > users.id, note: "Foreign key to direct supervisor table"]
+  indirect_supervisor_id varchar(36) [ref: > users.id, note: "Foreign key to indirect supervisor table"]
   created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
   updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
   is_active boolean [default: true, not null, note: "Status of the user account (for soft delete)"]
   note: "Users with all basic and profile information."
 }
- 
+
+// Authorization
 Table roles [headercolor: #ff0000] {
   id varchar(36) [pk, note: "UUID for the role, primary key"]
   name varchar(50) [not null, unique, note: "Unique role name (e.g., MERCHANDISER, ADMIN). Permissions are handled in application logic based on this role."]
@@ -83,6 +141,8 @@ Table sectors {
   name varchar
   description text
   sector_locations "varchar[]" [note: "List of geographical location that delimitated each sector"]
+  municipality_id varchar(36) [ref: > municipalities.id, note: "e.g Yaounde I, Yaounde II, Yaounde IV, ..."]
+  offline_mode boolean [default: false, note: "to allow field agent to work offline in this sector. All zones in this sector can be offline. offline oder is Region->Municipality->city->sector->zone"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   note: "Geographical coverage sector for zones"
@@ -95,6 +155,7 @@ Table zones [headercolor: #007bff] {
   zone_locations "varchar[]" [note: "List of geographical location that delimitated each zone"]
   sector_id varchar(36) [ref: > sectors.id, not null, note: "Foreign key to sectors"]
   city_id varchar(36) [ref: > cities.id]
+  offline_mode boolean [default: false, note: "to allow field agent to work offline in this zone. offline oder is Region->Municipality->city->sector->zone"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   note: "Geographical coverage zones for points of sale."
@@ -109,8 +170,19 @@ Table field_agent_zones {
 // Module: Point of Sale
 // ---
 
+Table pos_type_category {
+  id varchar(36) [pk, note: "UUID for the type of pos, primary key"]
+  parent_id varchar(36) [ref: > pos_type_category.id, default: null]
+  name varchar [not null]
+  description text
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `now()`, not null]
+  created_by varchar(36) [ref: > users.id, null]
+}
+
 Table pos_type {
   id varchar(36) [pk, note: "UUID for the type of pos, primary key"]
+  category_id varchar(36) [ref: > pos_type_category.id, default: null]
   name varchar [not null, note: "name of the pos type (e.g., 'Mami', 'Supermarket', 'Superette')"]
   description text
   created_at timestamp [default: `now()`, not null]
@@ -119,41 +191,65 @@ Table pos_type {
 }
  
 Table pos [headercolor: #007bff] {
-  id varchar(36) [pk, note: "UUID for the pos, primary key"]
+  id varchar(36) [pk, not null, note: "UUID for the pos"]
   pos_name varchar(255) [not null, note: "Name of the point of sale"]
-  pos_description text
+  pos_description text [default: null, note: "description of the pos"]
   zone_id varchar(36) [ref: > zones.id, not null, note: "Foreign key to the geographical zone"]
   pos_type_id varchar(50) [ref: > pos_type.id, not null, note: "Type of pos"]
-  validation_status varchar(50) [default: 'Pending', not null, note: "Status (e.g., 'Pending', 'Approved')"]
+  validation_status varchar(50) [default: 'Pending', not null, note: "Status (e.g., 'Pending', 'Supervised', 'Administrated', 'Approved', 'Rejected')"]
   city_id varchar(36) [ref: > cities.id]
   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
   wa_pos_phone_number "varchar[]" [null, note: "WA Phone number of the pos"]
   pos_default_phone_number varchar(50) [null, note: "Phone number of the pos"]
-  pos_default_manager varchar [ref: > users.id]
+  pos_email varchar [default: null, note: "email of the pos"]
+  image_urls "varchar[]" [note: "pictures of the pos"]
+  pos_default_manager varchar [ref: > users.id, not null, note: "ozner of the pos"]
+
+  // address
+  building_number varchar [note: "identifier of POS"]
+  street varchar [note: "e.g 123 Saint John Avenue"]
+  street_reference_name varchar [note: "e.g Ancienne Mairie Tsinga"]
+  neighborhood varchar [note: "Tsinga, Mokolo, ..."]
 
   created_at timestamp [default: `now()`, not null]
+  created_by varchar(36) [ref: > users.id, not null]
   updated_at timestamp [default: `now()`, not null]
-  created_by varchar(36) [ref: > users.id, null]
+  updated_by varchar(36) [ref: > users.id, not null]
   is_active boolean [default: true, not null, note: "Status of the pos (for soft delete)"]
   note: "Points of sale with validation, type, and geolocation."
+}
+
+Table pos_managers [headercolor: #007bff] {
+  id varchar(36) [pk, not null, note: "UUID for the pos manager"]
+  pos_id varchar [ref: > pos.id, not null, note: "reference of pos"]
+  manager_id varchar [ref: > users.id, not null, note: "user who manage pos activities"]
+  indexes {
+    (pos_id, manager_id) [unique]
+  }
+}
+
+Table pos_validation {
+  id varchar(36) [pk, not null, note: "UUID for the pos validation"]
+  pos_id varchar(36) [ref: > pos.id, not null]
+  manager_id varchar(36) [ref: > users.id, not null]
+  status varchar [note: "updated status"]
+  comment text [note: "manager apreciation about pos registration"]
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `null`]
 }
 
 Table pos_permanent_field_agent {
   pos_id varchar [ref: > pos.id, not null, note: "reference of pos"]
   field_agent_id varchar [ref: > users.id, not null, note: "user who works permanently in that pos"]
+  indexes {
+    (pos_id, field_agent_id) [pk]
+  }
 }
 
-Table pos_managers [headercolor: #007bff] {
-  pos_id varchar [ref: > pos.id, not null, note: "reference of pos"]
-  manager_id varchar [ref: > users.id, not null, note: "user who manage pos activities"]
-}
-
-// ---
 // Module: Wholesalers
-// ---
-
 Table wholesalers {
   id varchar(36) [pk, note: "UUID for the wholesaler, primary key"]
+  category_id varchar(36) [ref: > pos_type_category.id, default: null]
   name varchar
   location varchar [not null, note: "location where the agent made the sale, example: 3°53'07.1\"N 11°30'09.9\"E"]
   description text
@@ -165,11 +261,17 @@ Table wholesalers {
 Table wholesaler_managers [headercolor: #007bff] {
   wholesaler_id varchar [ref: > wholesalers.id, note: "reference of wholesaler"]
   manager_id varchar [ref: > users.id, note: "user who manage wholesaler activities"]
+  indexes {
+    (wholesaler_id, manager_id) [pk]
+  }
 }
 
 Table wholesaler_field_agents {
   wholesaler_id varchar [ref: > wholesalers.id, note: "reference of wholesaler"]
   field_agent_id varchar [ref: > users.id, note: "user who is supplied by the wholesaler"]
+  indexes {
+    (wholesaler_id, field_agent_id) [pk]
+  }
 }
 
 // ---
@@ -205,34 +307,29 @@ Table products [headercolor: #28a745] {
 Table product_variants [headercolor: #28a745] {
   id varchar(36) [pk, note: "UUID for the product variant, primary key"]
   product_id varchar(36) [ref: > products.id, not null, note: "Foreign key to the base product"]
-  // sku varchar(100) [not null, unique, note: "Stock Keeping Unit, unique identifier for the variant"]
-  // price decimal(10,2) [not null, note: "Price of this specific variant"]
-  // attributes json [null, note: "JSON object for attributes, e.g., {'Size': '500g', 'Flavor': 'Vanilla'}"]
   brand varchar [note: "product brand, e.g Cowbel, Miksi, ..."]
+  product_code varchar [note: "e.g: TPCBK025BA, TPMKK025BA, TPONBEG004CU001, FPCBPLG010SA300-INC2, ..."]
   description text [null, note: "Detailed description of the product"]
+  summary text [null, note: "Detailed description summary of the product"]
   category_id varchar(36) [ref: > product_categories.id, not null, note: "Foreign key to the product's category"]
   sub_category_id varchar(36) [ref: > product_categories.id, not null, note: "Foreign key to the product's category"]
   packaging_group varchar [note: "e.g bag, pouch, sachet, .."]
   packaging_count int [note: "number of units in the packaging group"]
+  packaging_name varchar [note: "formal name of the packaging"]
   grammage_per_piece decimal(10,2) [note: "13.75, 170, ..."]
   product_kg decimal(10,2) [note: "11.52, 0.9, ..."]
   image_url varchar(255) [null, note: "URL to the primary image for this variant"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
-  is_active boolean [default: true, not null, note: "Status of the variant (for soft delete)"]
+  is_active boolean [default: true, not null]
   note: "Product variants with price, SKU, image, and flexible attributes saved as JSON."
-}
-
-Table cities {
-  id varchar(36) [pk, note: "UUID for the city, primary key"]
-  city_name varchar(50) [not null, unique]
-  created_at timestamp [default: `now()`, not null]
 }
 
 Table price_groups {
   price_group_code varchar(36) [pk, note: "PGKIN, PGBAN, PGBUM, ..."]
   price_group_name varchar(50) [note: "Kinshasa Price Groupm, Beni Price Group, ..."]
   city_id varchar(36) [ref: > cities.id]
+  is_active boolean [default: true, not null]
   created_at timestamp [default: `now()`, not null]
 }
 
@@ -245,6 +342,7 @@ Table prices {
   exchange_rate decimal(10,2)
   price_per_unit_usd decimal(10,2)
   price_per_unit_local_currency decimal(10,2)
+  is_active boolean [default: true, not null]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
 }
@@ -270,13 +368,22 @@ Table products_retrieval {
   id varchar(36) [pk, note: "UUID for the product supply, primary key"]
   field_agent_id varchar(36) [ref: > users.id, note: "Foreign key to the users"]
   wholesaler_id varchar(36) [ref: > wholesalers.id, note: "Foreign key to the wholesaler"]
+  comment text [default: null]
+  retrieval_status varchar [note: "Pending, Complete"]
+  order_id varchar(36) [ref: > orders.id, default: null, note: "reference of oreder that this retrieval belonging to, it can be null"]
+  total_amount decimal(10,2) [not null, note: "Total amount of the retrieval"]
+  activity_id varchar(36) [ref: > activity_monitoring.id, note: "refered activities"]
   retrieve_at datetime [default: `now()`, not null, note: "datetime of the products retrieval"]
+  updated_at timestamp [default: null]
 }
 
 Table products_retrieval_item {
   products_retrieval_id varchar(36) [ref: > products_retrieval.id, not null, note: "foreign key"]
   product_variant_id varchar(36) [ref: > product_variants.id, note: "Foreign key to the product variant"]
   stock_quantity int [not null, note: "quatity retrieved"]
+  unit_price decimal(10,2) [not null, note: "Price of the variant at the time of purchase"]
+  amount decimal(10, 2) [not null, note: " unit_price * stock_quantity "]
+  comment text [default: null]
 }
 
 Table products_send_back {
@@ -300,13 +407,21 @@ Table products_send_back_item {
 Table orders [headercolor: #ffc107] {
   id varchar(36) [pk, note: "UUID for the order, primary key"]
   pos_id varchar(36) [ref: > pos.id, not null, note: "Foreign key to the pos for fulfillment"]
+  order_number varchar [not null, note: "POS/DayMonthYear/SequenceNumber e.g: DOV/040725/0001, SL/040725/0002 (SL = Santa Lucia)"]
   order_date timestamp [default: `now()`, not null, note: "Timestamp when the order was placed"]
   total_amount decimal(10,2) [not null, note: "Total amount of the order"]
   status varchar(50) [default: 'Pending', not null, note: "Order status (e.g., 'Pending', 'Delivered')"]
+  payment_status varchar [default: 'Waiting', not null, note: "Order status (e.g., 'Partial', 'Complete')"]
+  remains_to_pay decimal(10, 2) [default: 'total_amount']
   shipping_address text [null, note: "Full shipping address for the order"]
+  activity_id varchar(36) [ref: > activity_monitoring.id, note: "refered activities"]
+  is_active boolean [default: true, not null]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
   note: "Complete orders with date, status, and delivery info."
+  indexes {
+    (order_number) [unique]
+  }
 }
  
 Table order_items [headercolor: #ffc107] {
@@ -317,6 +432,7 @@ Table order_items [headercolor: #ffc107] {
   sku varchar(100) [not null, note: "Denormalized: variant SKU at time of purchase"]
   quantity int [default: 1, not null, note: "Quantity. Should be > 0."]
   price_at_purchase decimal(10,2) [not null, note: "Price of the variant at the time of purchase"]
+  amount decimal(10, 2) [not null, note: " price_at_purchase * quantity "]
   note: "Denormalized item details for faster reads. Includes product name and SKU."
 }
 
@@ -325,13 +441,25 @@ Table order_items [headercolor: #ffc107] {
 // ---
 
 Table pos_delivery {
-  pos_id varchar [ref: > pos.id, not null]
-  order_id varchar [ref: > orders.id, not null]
-  field_agent_id varchar [ref: > users.id]
-  delivery_status boolean
+  id varchar(36) [pk, note: "UUID for delivery, primary key"]
+  pos_id varchar(36) [ref: > pos.id, not null]
+  order_id varchar(36) [ref: > orders.id, not null]
+  delivery_status varchar(50) [default: 'Pending', not null, note: "Order status (e.g., 'Pending', 'Delivered')"]
+  field_agent_id varchar [ref: > users.id, not null, note: "field agent who make the delivery"]
+  activity_id varchar(36) [ref: > activity_monitoring.id, note: "refered activities"]
   delivered_at timestamp [default: `now()`, not null]
   created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
   updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+}
+
+Table pos_delivery_item {
+  id varchar(36) [pk, note: "UUID for delivery item, primary key"]
+  pos_delivery_id varchar(36) [ref: > pos_delivery.id, not null]
+  product_variant_id varchar(36) [ref: > product_variants.id, not null, note: "Foreign key to the product variant"]
+  quantity int [default: 1, not null, note: "Quantity. Should be > 0."]
+  comment text [default: null, note: "delivery note"]
+  created_at timestamp [default: `now()`, not null]
+  updated_at timestamp [default: `now()`, not null]
 }
  
 // ---
@@ -345,6 +473,7 @@ Table pos_inspect [headercolor: #6f42c1] {
   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
   comment text [null, note: "General comments about the visit"]
   media_data json [null, note: "JSON array of media objects. E.g., [{'image_url': '...', 'comment': '...'}]"]
+  activity_id varchar(36) [ref: > activity_monitoring.id, note: "refered activities"]
   visit_date timestamp [default: `now()`, not null, note: "Timestamp of the visit"]
   created_at timestamp [default: `now()`, not null]
   updated_at timestamp [default: `now()`, not null]
@@ -357,25 +486,6 @@ Table pos_inspect_item {
   quantity int [default: 0, not null, note: "Current stock quantity"]
   unit_price decimal(10,2) [not null, note: "Price of the variant at the time of purchase"]
 }
- 
-// Table pos_visits [headercolor: #6f42c1] {
-//   id varchar(36) [pk, note: "UUID for the pos visit, primary key"]
-//   pos_id varchar(36) [ref: > pos.id, not null, note: "Foreign key to the pos visited"]
-//   visitor_id varchar(36) [ref: > users.id, not null, note: "Foreign key to the user performing the visit"]
-//   visit_type varchar(50) [not null, note: "Type of visit (e.g., 'Sales Visit', 'Audit')"]
-//   visit_date timestamp [default: `now()`, not null, note: "Timestamp of the visit"]
-//   status varchar(50) [default: 'Completed', not null, note: "Status of the visit"]
-//   comment text [null, note: "General comments about the visit"]
-//   location varchar [not null, note: "example: 3°53'07.1\"N 11°30'09.9\"E"]
-//   check_in_time timestamp [null]
-//   check_out_time timestamp [null]
-//   product_audits_data json [null, note: "JSON array of product audit objects collected during the visit. E.g., [{'variant_id': 'uuid', 'observed_price': 9.99, ...}]"]
-//   survey_responses_data json [null, note: "JSON array of survey responses. E.g., [{'question': '...', 'answer': '...'}]"]
-//   media_data json [null, note: "JSON array of media objects. E.g., [{'image_url': '...', 'comment': '...'}]"]
-//   created_at timestamp [default: `now()`, not null]
-//   updated_at timestamp [default: `now()`, not null]
-//   note: "Consolidated POS visits. Audits, surveys, and media are posd as JSON."
-// }
 
 Table product_sales [headercolor: #ffc107] {
   id varchar(36) [pk, note: "UUID for the sale product, primary key"]
@@ -399,17 +509,227 @@ Table product_sales_items [headercolor: #ffc107] {
   note: "Denormalized item details for faster reads. Includes product name and SKU."
 }
 
-// Attendance Monitoring
+// ---
+// Notifications
+// ---
+Table notification_type {
+  id varchar(36) [pk, note: "UUID for the notification type, primary key"]
+  name varchar [not null, note: "POS Created, POS Validated, ..."]
+  message text [not null, note: "message content"]
+  description text
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: null, note: "Timestamp of last user update"]
+}
 
-Table attendance_monitoring {
-  id varchar(36) [pk, note: "UUID for the attendance, primary key"]
+Table notification_template {
+  id varchar(36) [pk, note: "UUID for the notification type, primary key"]
+  name varchar [not null, note: "POS Created, POS Validated, ..."]
+  template text [not null, note: "message content"]
+  description text
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: null, note: "Timestamp of last user update"]
+}
+
+Table notification {
+  id varchar(36) [pk, note: "UUID for the notifications, primary key"]
+  template_id varchar(36) [ref: > notification_template.id, not null, note: "reference of notification template"]
+  receipient_id varchar(36) [ref: > users.id, not null, note: "reference of receipient"]
+  message text [not null, note: "formatted text with variables"]
+  status enum("Send, Received, Read") [not null, default: "Send"]
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+}
+
+// Activies Monitoring
+Table activity_monitoring {
+  id varchar(36) [pk, note: "UUID for the activity monitoring, primary key"]
   user_id varchar [ref: > users.id, not null]
+  pos_id varchar(36) [ref: > pos.id, not null, note: "where the agent starts the activity"]
+  activity_type enum("DELIVERY, ORDER, RETRIEVAL, INSPECT, ...") [not null]
   start_time timestamp [default: `now()`, not null, note: "Timestamp when the user start the work"]
   start_location varchar [not null, note: "location where the user start the work"]
   end_time timestamp [not null, note: "Timestamp when the user end the work"]
   end_location varchar [null, note: "location where the user end the work"]
+  status enum("Start, End, Discard") [not null, default: "Start"]
+  comment text
   date date [not null, note: "day of work"]
 }
 
 // Survey
 
+Table form_category  {
+  id varchar(36) [pk, note: "UUID for the form category, primary key"]
+  parent_id varchar(36) [ref: > form_category.id, default: null, note: "reference of the parent category"]
+  category_name varchar [not null, note: "name of the category"]
+  description text [default: null, note: "description of the category"]
+  created_by varchar(36) [ref: > users.id, not null, note: "Author who has created the category"]
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+}
+
+Table form {
+  id varchar(36) [pk, note: "UUID for the form, primary key"]
+  form_name varchar [not null, note: "name of the form"]
+  description text [default: null, note: "description of the form"]
+  form_category_id varchar(36) [ref: > form_category.id, default: null, note: "reference of the form category"]
+  created_by varchar(36) [ref: > users.id, not null, note: "Author who has created the form"]
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+}
+
+Table field_category {
+  id varchar(36) [pk, note: "UUID for the field category, primary key"]
+  parent_id varchar(36) [ref: > field_category.id, default: null, note: "reference of the parent field category"]
+  field_category_name varchar [not null, note: "name of the field category"]
+  description text [default: null, note: "description of the field category"]
+}
+
+Table form_field {
+  id varchar(36) [pk, note: "UUID for the form field, primary key"]
+  label varchar
+  placeholder varchar
+  response_type varchar [not null, note: "[TEXT, NUMBER, SELECT, CHECKBOX, RADIO, DATE, TIME, DATETIMEM, IMAGE, DOCUMENT, VIDEO]"]
+  is_required boolean [default: false]
+  field_type_obj "{}" [note: "required input items"]
+  order_in_form int [default: null, note: "order of the field in the form"]
+  field_category_id varchar(36) [ref: > field_category.id, default: null, note: "reference of the field category"]
+  order_in_field_category int [default: null, note: "order of the field in the field category"]
+  form_id varchar(36) [ref: > form.id, not null, note: "reference of the form in which the field belong"]
+  blocks varchar(36) [ref: > form_field.id, default: null, note: "reference of the field which id blocked by the current field"]
+  conditional_values "varchar[]" [default: null, note: "coming from 'blocks field' and enable the current field to be display in the form"]
+  data_source_collection_id varchar(36) [ref: > data_source_collection.id, default: null, note: "Data provider to fill this field"]
+}
+
+// Text input
+Table text_field {
+  min_length int [default: 0, note: "minimum of input text"]
+  max_length int [default: 255, note: "maximum of input text"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table number_field {
+  min int [default: null, note: "minimum value"]
+  max int [default: null, note: "maximum value"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table textarea_field {
+  min_length int [default: 0, note: "minimum of input text"]
+  max_length int [default: 5000, note: "maximum of input text"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+// Date-time field
+Table datetime_field {
+  start_datetime datetime [default: 'now()', note: "start datetime"]
+  end_datetime datetime [default: null, note: "end datetime"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table time_field {
+  start_time time [default: 'now()', note: "start time"]
+  end_time time [default: null, note: "end time"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table date_field {
+  start_date date [default: 'today()', note: "start date"]
+  end_date date [default: null, note: "end date"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+// Select values
+Table checkbox_field {
+  values_list_length int [default: null, note: "length of the list of the values to check"]
+  values "varchar[]" [note: "List of values to check"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table select_field {
+  values_list_length int [default: null, note: "length of the list of the values to select"]
+  values "varchar[]" [note: "List of values to select"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table radio_field {
+  values_list_length int [default: null, note: "length of the list of the values to select"]
+  values "varchar[]" [note: "List of values to select"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table document_field {
+  max_size int [default: null, note: "max size of the document"]
+  accepted_types "varchar[]" [not null, note: "[PDF, XLSX, XLS, DOCX]"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table image_field {
+  max_size int [default: null, note: "max size of the image"]
+  accepted_types "varchar[]" [not null, note: "[PNG, JPG, JPEG, WEB]"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table video_field {
+  max_size int [default: null, note: "max size of the video"]
+  accepted_types "varchar[]" [not null, note: "[MP4, AVI, WEBM, MOV]"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+// Custom field
+Table email_field {
+  email_regex varchar [default: null, note: "regex to valdate email"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table phone_field {
+  phone_regex varchar [default: null, note: "regex to valdate phone number"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table url_field {
+  url_regex varchar [default: null, note: "regex to valdate url"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table location_field {
+  location_regex "varchar[]" [default: null, note: "regex to valdation location"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+Table country_field {
+  country_id varchar(36) [ref: > country.id, note: "reference of country"]
+  target_field varchar(36) [ref: > form_field.field_type_obj]
+}
+
+// Form response
+Table form_response {
+  id varchar(36) [pk, note: "UUID for the form response, primary key"]
+  form_id varchar(36) [ref: > form.id, not null, note: "reference of the form that the current form response belong to"]
+  fill_by varchar(36) [ref: > users.id, note: "Field agent who fills out the form"]
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+}
+
+Table form_field_response {
+  id varchar(36) [pk, note: "UUID for the form field response, primary key"]
+  form_response_id varchar(36) [ref: > form_response.id, not null, note: "reference of the form response that the current field response belong to"]
+  response_type varchar [not null, note: "[TEXT, NUMBER, SELECT, CHECKBOX, RADIO, DATE, TIME, DATETIMEM, IMAGE, DOCUMENT, VIDEO]"]
+  form_field_id varchar(36) [ref: > form_field.id, not null, note: "reference of the form field that the current field response belong to"]
+  response_value "varchar[]"
+}
+
+Table data_source_collection {
+  id varchar(36) [pk, note: "UUID for data source collection, primary key"]
+  collection_name varchar [not null, note: "name of the data source collection"]
+  dependency_schema "{}" [default: null, note: "e.g {name: text, weight: number, price: number, ...}"]
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+}
+
+Table data_source {
+  id varchar(36) [pk, note: "UUID for data source, primary key"]
+  data_value varchar [not null]
+  depency "{}" [default: null, note: "e.g {name: Pop-corn, weight: 0.5kg, price: 1000fcfa, ...}"]
+  collection_id varchar(36) [ref: > data_source_collection.id, not null, note: "collection which the current data source belong to"]
+  created_at timestamp [default: `now()`, not null, note: "Timestamp of user creation"]
+  updated_at timestamp [default: `now()`, not null, note: "Timestamp of last user update"]
+}
